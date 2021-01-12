@@ -5,12 +5,13 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.view.View
 import android.widget.ImageView
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.IOException
@@ -19,32 +20,39 @@ import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
-    private val REQUEST_IMAGE_CAPTURE = 1
+    private val REQUEST_IMAGE_THUMBNAIL = 1
+    private val REQUEST_IMAGE_CAMERA = 2
+
     private lateinit var imageView: ImageView
-    lateinit var currentPhotoPath: String
+    private lateinit var photoInfo : TextView
+    private lateinit var currentPhotoPath: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         imageView = findViewById(R.id.imageView)
-
+        photoInfo = findViewById(R.id.photoInfo)
     }
 
-    fun takePhoto(view: View) {
-//        val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-//        startActivityForResult(takePictureIntent,REQUEST_IMAGE_CAPTURE)
+    // 调用相机拍照获取缩略图
+    fun takeThumbnail(view: View) {
+        val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        startActivityForResult(takePictureIntent, REQUEST_IMAGE_THUMBNAIL)
+    }
 
+    // 调用相机拍照保存到文件
+    fun takePhoto(view: View) {
         Intent(MediaStore.ACTION_IMAGE_CAPTURE).also { takePictureIntent ->
             takePictureIntent.resolveActivity(packageManager)?.also {
-                val photoFile : File? = try {
+                val photoFile: File? = try {
                     createImageFile()
-                }catch (ex:IOException){
+                } catch (ex: IOException) {
                     null
                 }
                 photoFile?.also {
-                    val photoUri = FileProvider.getUriForFile(this,"luyao.android.camera.fileprovider",it)
-                    takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT,photoUri)
-                    startActivityForResult(takePictureIntent,REQUEST_IMAGE_CAPTURE)
+                    val photoUri = FileProvider.getUriForFile(this, "luyao.android.camera.fileprovider", it)
+                    takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
+                    startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAMERA)
                 }
             }
         }
@@ -52,39 +60,34 @@ class MainActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode ==REQUEST_IMAGE_CAPTURE && resultCode == Activity.RESULT_OK){
-            // 缩略图
-//            val thumbnail = data?.extras?.get("data") as Bitmap
-//            imageView.setImageBitmap(thumbnail)
-
-            setPic()
+        if (resultCode == Activity.RESULT_OK) {
+            if (requestCode == REQUEST_IMAGE_THUMBNAIL) {
+                // 获取缩略图
+                val thumbnail = data?.extras?.get("data") as Bitmap
+                imageView.setImageBitmap(thumbnail)
+            }else if (requestCode == REQUEST_IMAGE_CAMERA) {
+                // 照片已保存到本地文件
+                getPicFromFile()
+            }
         }
     }
 
     @Throws(IOException::class)
     private fun createImageFile(): File {
         // Create an image file name
-        val timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
+        val timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val storageDir: File? = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
         return File.createTempFile(
-            "JPEG_${timeStamp}_", /* prefix */
-            ".jpg", /* suffix */
-            storageDir /* directory */
+                "JPEG_${timeStamp}_", /* prefix */
+                ".jpg", /* suffix */
+                storageDir /* directory */
         ).apply {
             // Save a file: path for use with ACTION_VIEW intents
             currentPhotoPath = absolutePath
         }
     }
 
-    private fun galleryAddPic() {
-        Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE).also { mediaScanIntent ->
-            val f = File(currentPhotoPath)
-            mediaScanIntent.data = Uri.fromFile(f)
-            sendBroadcast(mediaScanIntent)
-        }
-    }
-
-    private fun setPic() {
+    private fun getPicFromFile() {
         // Get the dimensions of the View
         val targetW: Int = imageView.width
         val targetH: Int = imageView.height
@@ -108,6 +111,17 @@ class MainActivity : AppCompatActivity() {
         }
         BitmapFactory.decodeFile(currentPhotoPath, bmOptions)?.also { bitmap ->
             imageView.setImageBitmap(bitmap)
+            photoInfo.text = String.format(Locale.getDefault(),"文件路径：%s\n文件大小：%d",
+                    currentPhotoPath,File(currentPhotoPath).length())
+        }
+    }
+
+    // 添加到系统图库
+    private fun galleryAddPic() {
+        Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE).also { mediaScanIntent ->
+            val f = File(currentPhotoPath)
+            mediaScanIntent.data = Uri.fromFile(f)
+            sendBroadcast(mediaScanIntent)
         }
     }
 }
